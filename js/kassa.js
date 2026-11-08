@@ -1,0 +1,167 @@
+// Экран кассы: вход Google, заказы за 12 часов, звук на новый заказ, смена статуса.
+import { authApi, firestore } from './db.js?v=e4622669';
+import { rub, dishes } from './cart.js?v=e4622669';
+import { cafe } from './data.js?v=e4622669';
+
+const app = document.getElementById('app');
+const who = document.getElementById('who');
+const out = document.getElementById('out');
+const toastEl = document.getElementById('toast');
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const hhmm = (ts) => (ts ? ts.toDate().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : '');
+
+const COLS = [
+  { key: 'new', title: 'Новые', empty: 'Новых заказов нет', sort: 1 },
+  { key: 'accepted', title: 'Приняты', empty: 'Пусто', sort: 1 },
+  { key: 'punched', title: 'Пробиты', empty: 'Пусто', sort: -1 },
+];
+
+let orders = [];
+let unsub = null;
+let first = true;
+let audio = null;
+let wake = null;
+const fresh = new Set();
+const armed = new Map();
+
+function toast(text) {
+  toastEl.textContent = text;
+  toastEl.hidden = false;
+  clearTimeout(toast.t);
+  toast.t = setTimeout(() => { toastEl.hidden = true; }, 4000);
+}
+
+function beep() {
+  try {
+    audio ||= new AudioContext();
+    const t = audio.currentTime;
+    [[784, 0], [1046, 0.18], [784, 0.5], [1046, 0.68]].forEach(([hz, d]) => {
+      const o = audio.createOscillator();
+      const g = audio.createGain();
+      o.frequency.value = hz;
+      g.gain.setValueAtTime(0.0001, t + d);
+      g.gain.exponentialRampToValueAtTime(0.5, t + d + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + d + 0.16);
+      o.connect(g).connect(audio.destination);
+      o.start(t + d);
+      o.stop(t + d + 0.17);
+    });
+  } catch { /* без звука */ }
+}
+
+async function keepAwake() {
+  try { wake = await navigator.wakeLock?.request('screen'); } catch { /* экран может погаснуть */ }
+}
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && wake) keepAwake(); });
+
+function card(o) {
+  const n = o.items.reduce((s, i) => s + i.qty, 0);
+  const act = o.status === 'new' ? ['accepted', 'Принят'] : o.status === 'accepted' ? ['punched', 'Пробит'] : null;
+  const btns = (act ? `<button type="button" class="act head" data-set="${act[0]}" data-id="${o.id}">${act[1]}</button>` : '')
+    + (o.status !== 'punched' ? `<button type="button" class="ghost" data-cancel="${o.id}">${armed.has(o.id) ? 'Точно отменить?' : 'Отменить'}</button>` : '');
+  return `<article class="ord st-${o.status}${fresh.has(o.id) ? ' fresh' : ''}">`
+    + `<div class="top"><b class="head">Кабинка ${o.cabin}</b><span class="num muted">${hhmm(o.createdAt)}</span></div>`
+    + `<ul>${o.items.map((i) => `<li><span>${esc(i.name)}</span><span class="num">× ${i.qty}</span><span class="num">${rub(i.price * i.qty)}</span></li>`).join('')}</ul>`
+    + `<div class="sum"><span class="muted">${dishes(n)}</span><b class="num">${rub(o.total)}</b></div>`
+    + (btns ? `<div class="acts">${btns}</div>` : '') + '</article>';
+}
+
+function render() {
+  const nNew = orders.filter((o) => o.status === 'new').length;
+  document.title = `${nNew ? `(${nNew}) ` : ''}Касса: ${cafe.name}`;
+  app.innerHTML = '<div class="cols">' + COLS.map((c) => {
+    const list = orders.filter((o) => o.status === c.key)
+      .sort((a, b) => c.sort * ((a.createdAt?.toMillis() || 0) - (b.createdAt?.toMillis() || 0)));
+    return `<section class="col col-${c.key}"><h2 class="head">${c.title} <span class="num">${list.length}</span></h2>`
+      + (list.length ? list.map(card).join('') : `<p class="muted">${c.empty}</p>`) + '</section>';
+  }).join('') + '</div>';
+}
+
+function loginView(msg = '') {
+  app.innerHTML = '<div class="login"><h1 class="head">Касса</h1>'
+    + '<p>Войдите аккаунтом Google, который хозяин добавил в список кассиров.</p>'
+    + (msg ? `<p class="err">${esc(msg)}</p>` : '')
+    + '<button type="button" class="act head big" id="in">Войти через Google</button></div>';
+}
+
+async function subscribe(user) {
+  const { f, db } = await firestore();
+  const since = f.Timestamp.fromMillis(Date.now() - 12 * 3600 * 1000);
+  const q = f.query(f.collection(db, 'orders'), f.where('createdAt', '>=', since), f.orderBy('createdAt', 'desc'), f.limit(150));
+  app.innerHTML = '<p class="muted center">Загрузка заказов…</p>';
+  unsub = f.onSnapshot(q, (snap) => {
+    const added = snap.docChanges().filter((ch) => ch.type === 'added' && ch.doc.data().status === 'new').map((ch) => ch.doc.id);
+    orders = snap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((o) => o.status !== 'cancelled');
+    if (!first && added.length) {
+      beep();
+      added.forEach((id) => fresh.add(id));
+      setTimeout(() => { added.forEach((id) => fresh.delete(id)); render(); }, 6000);
+    }
+    first = false;
+    render();
+  }, (err) => {
+    console.error(err);
+    loginView(err.code === 'permission-denied'
+      ? `У почты ${user.email} нет доступа к кассе. Попросите хозяина добавить её.`
+      : 'Нет связи с базой. Проверьте интернет и обновите страницу.');
+  });
+}
+
+async function setStatus(id, status, btn) {
+  btn.disabled = true;
+  try {
+    const { f, db } = await firestore();
+    await f.updateDoc(f.doc(db, 'orders', id), { status, updatedAt: f.serverTimestamp() });
+  } catch (err) {
+    console.error(err);
+    btn.disabled = false;
+    toast('Не сохранилось. Проверьте интернет и нажмите ещё раз.');
+  }
+}
+
+let api;
+try {
+  api = await authApi();
+} catch (err) {
+  console.error(err);
+  loginView('Нет связи с сервером. Проверьте интернет и обновите страницу.');
+}
+
+if (api) {
+  const { m, auth } = api;
+  m.onAuthStateChanged(auth, (user) => {
+    unsub?.();
+    unsub = null;
+    orders = [];
+    first = true;
+    out.hidden = !user;
+    who.textContent = user ? user.email : '';
+    if (user) subscribe(user); else loginView();
+  });
+
+  document.addEventListener('click', async (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    try { audio ||= new AudioContext(); } catch { /* без звука */ }
+    if (!wake) keepAwake();
+    if (b.id === 'in') {
+      try { await m.signInWithPopup(auth, new m.GoogleAuthProvider()); } catch (err) {
+        if (err.code !== 'auth/popup-closed-by-user') loginView('Вход не удался. Попробуйте ещё раз.');
+      }
+    } else if (b.id === 'out') {
+      m.signOut(auth);
+    } else if (b.dataset.set) {
+      setStatus(b.dataset.id, b.dataset.set, b);
+    } else if (b.dataset.cancel) {
+      const id = b.dataset.cancel;
+      if (armed.has(id)) {
+        clearTimeout(armed.get(id));
+        armed.delete(id);
+        setStatus(id, 'cancelled', b);
+      } else {
+        armed.set(id, setTimeout(() => { armed.delete(id); render(); }, 3000));
+        render();
+      }
+    }
+  });
+}

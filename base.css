@@ -1,0 +1,32 @@
+/* Брендбук «Сочный мощный», вариант «Угли». Значения только отсюда. */
+@import url("https://fonts.googleapis.com/css2?family=Oswald:wght@500;700&family=Golos+Text:wght@400;600&display=swap");
+
+:root {
+  --bg: #0d0c0b;
+  --surface: #1a1716;
+  --text: #f4f0eb;
+  --muted: #a39a92;
+  --line: #24201e;
+  --red: #e3261c;
+  --red-press: #c41f16;
+  --on-red: #ffffff;
+  --shade: rgba(0, 0, 0, .6);
+
+  --font-head: "Oswald", "Arial Narrow", sans-serif;
+  --font-body: "Golos Text", system-ui, sans-serif;
+
+  --r: 6px;
+  --s1: 4px;
+  --s2: 8px;
+  --s3: 12px;
+  --s4: 16px;
+  --s6: 24px;
+  --tap: 44px;
+  --bar: 64px;
+  --t: 200ms;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--text); font-family: var(--font-body); -webkit-tap-highlight-color: transparent; }
+.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.head { font-family: var(--font-head); font-weight: 700; text-transform: uppercase; }
