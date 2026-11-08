@@ -1,10 +1,10 @@
 // Экран кассы: вход Google, заказы за 12 часов, звук на новый заказ, смена статуса, наличие блюд.
-import { authApi, firestore } from './db.js?v=044dd713';
-import { rub, dishes, WAITS, cleanOff, goneIds, sumWithout, countWithout } from './cart.js?v=044dd713';
-import { sections, items } from './data.js?v=044dd713';
-import { cafe, applyBrand } from './brand.js?v=044dd713';
+import { authApi, firestore } from './db.js?v=c0b02ce3';
+import { rub, dishes, WAITS, cleanOff, goneIds, sumWithout, countWithout } from './cart.js?v=c0b02ce3';
+import { sections, items } from './data.js?v=c0b02ce3';
+import { cafe, applyBrand, pageTitle } from './brand.js?v=c0b02ce3';
 
-applyBrand(['Касса', cafe.words.join(' ')], `Касса: ${cafe.name}`, '../');
+applyBrand(['Касса', cafe.words.join(' ')], pageTitle('Касса'), '../');
 const app = document.getElementById('app');
 const who = document.getElementById('who');
 const out = document.getElementById('out');
@@ -110,7 +110,7 @@ function stockView() {
 
 function render() {
   const nNew = orders.filter((o) => o.status === 'new').length;
-  document.title = `${nNew ? `(${nNew}) ` : ''}Касса: ${cafe.name}`;
+  document.title = `${nNew ? `(${nNew}) ` : ''}${pageTitle('Касса')}`;
   stockEl.textContent = mode === 'stock' ? `Заказы${nNew ? ` · новых ${nNew}` : ''}` : `Наличие${off.size ? ` · нет ${off.size}` : ''}`;
   stockEl.classList.toggle('hot', mode === 'stock' && nNew > 0);
   if (mode === 'stock') { app.innerHTML = stockView(); return; }

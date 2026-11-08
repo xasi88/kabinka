@@ -1,13 +1,13 @@
 // Меню гостя: блюда, корзина, отправка на кассу, «Ваши заказы», дозаказ, время готовности, наличие.
-import { sections, items } from './data.js?v=044dd713';
-import { cafe, applyBrand } from './brand.js?v=044dd713';
+import { sections, items } from './data.js?v=c0b02ce3';
+import { cafe, applyBrand, pageTitle } from './brand.js?v=c0b02ce3';
 import {
   addItem, removeItem, cartLines, count, total, cabinFromUrl, parseCabin,
   buildOrder, rub, dishes, freshOrder, freshOrders, ordersTotal, parentFor, statusText,
   cleanOff, offLines, offFromRest, goneIds, sumWithout,
-} from './cart.js?v=044dd713';
-import { firestore } from './db.js?v=044dd713';
-import { firebaseConfig } from './firebase-config.js?v=044dd713';
+} from './cart.js?v=c0b02ce3';
+import { firestore } from './db.js?v=c0b02ce3';
+import { firebaseConfig } from './firebase-config.js?v=c0b02ce3';
 
 const $ = (s) => document.querySelector(s);
 const store = {
@@ -295,7 +295,7 @@ setInterval(() => {
   if (view === 'sent') renderSheet();
 }, 30000);
 
-applyBrand(cafe.words, `${cafe.name}: меню`);
+applyBrand(cafe.words.length ? cafe.words : ['Меню'], pageTitle('Меню'));
 renderMenu();
 renderHeader();
 renderBar();
