@@ -1,7 +1,7 @@
 // Экран кассы: вход Google, заказы за 12 часов, звук на новый заказ, смена статуса.
-import { authApi, firestore } from './db.js?v=e458b66d';
-import { rub, dishes } from './cart.js?v=e458b66d';
-import { cafe } from './data.js?v=e458b66d';
+import { authApi, firestore } from './db.js?v=31896029';
+import { rub, dishes } from './cart.js?v=31896029';
+import { cafe } from './data.js?v=31896029';
 
 const app = document.getElementById('app');
 const who = document.getElementById('who');

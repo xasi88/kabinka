@@ -1,10 +1,10 @@
 // Меню гостя: блюда, корзина, отправка заказа на кассу, статус заказа.
-import { cafe, sections, items } from './data.js?v=e458b66d';
+import { cafe, sections, items } from './data.js?v=31896029';
 import {
   addItem, removeItem, cartLines, count, total, cabinFromUrl, parseCabin,
   buildOrder, rub, dishes, STATUS, freshOrder,
-} from './cart.js?v=e458b66d';
-import { firestore } from './db.js?v=e458b66d';
+} from './cart.js?v=31896029';
+import { firestore } from './db.js?v=31896029';
 
 const $ = (s) => document.querySelector(s);
 const store = {
@@ -219,4 +219,5 @@ renderHeader();
 renderBar();
 watch();
 if (count(lines())) warm();
-else setTimeout(() => (window.requestIdleCallback ? window.requestIdleCallback(warm) : warm()), 2500);
+// Свободная минута браузера может не наступить: предел 1,5 с (проверено 2026-11-08).
+else setTimeout(() => (window.requestIdleCallback ? window.requestIdleCallback(warm, { timeout: 1500 }) : warm()), 2000);
