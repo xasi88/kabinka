@@ -9,6 +9,7 @@ button:active { transform: scale(.97); }
 .wm { display: flex; align-items: center; gap: var(--s2); font-family: var(--font-head); font-weight: 700; text-transform: uppercase; line-height: 1; }
 .wm i { font-style: normal; font-size: 34px; color: var(--red); }
 .wm span { display: block; font-size: 15px; }
+.wm img { display: block; height: 40px; width: auto; }
 .cab { min-height: var(--tap); padding: 0 var(--s4); border: 2px solid var(--red); border-radius: var(--r); font-weight: 600; font-size: 15px; }
 
 .tabs { position: sticky; top: 68px; z-index: 4; display: flex; gap: var(--s2); padding: 0 var(--s4) var(--s3); background: var(--bg); overflow-x: auto; scrollbar-width: none; }

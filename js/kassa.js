@@ -1,8 +1,10 @@
 // Экран кассы: вход Google, заказы за 12 часов, звук на новый заказ, смена статуса, наличие блюд.
-import { authApi, firestore } from './db.js?v=2e1789b8';
-import { rub, dishes, WAITS, cleanOff, goneIds, sumWithout, countWithout } from './cart.js?v=2e1789b8';
-import { cafe, sections, items } from './data.js?v=2e1789b8';
+import { authApi, firestore } from './db.js?v=044dd713';
+import { rub, dishes, WAITS, cleanOff, goneIds, sumWithout, countWithout } from './cart.js?v=044dd713';
+import { sections, items } from './data.js?v=044dd713';
+import { cafe, applyBrand } from './brand.js?v=044dd713';
 
+applyBrand(['Касса', cafe.words.join(' ')], `Касса: ${cafe.name}`, '../');
 const app = document.getElementById('app');
 const who = document.getElementById('who');
 const out = document.getElementById('out');
