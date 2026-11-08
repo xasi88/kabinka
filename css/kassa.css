@@ -65,8 +65,9 @@ button:disabled { opacity: .5; }
 .sk.no { border-color: var(--red); }
 .sk.no span { color: var(--muted); text-decoration: line-through; }
 .sk.no b { background: var(--red); color: var(--on-red); }
-.ord li.gone span:first-child { color: var(--red); }
-.ord li em { font-style: normal; font-size: 14px; font-weight: 600; }
+.ord li.gone span { color: var(--red); text-decoration: line-through; }
+.ord li em { display: inline-block; font-style: normal; font-size: 14px; font-weight: 600; text-decoration: none; }
+.ord .sum s { color: var(--muted); font-size: 17px; font-weight: 500; }
 
 .banner { display: block; width: 100%; min-height: 56px; padding: var(--s3) var(--s4); background: var(--red); color: var(--on-red); font: 600 18px var(--font-body); text-align: center; }
 .banner[hidden] { display: none; }

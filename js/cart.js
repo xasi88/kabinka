@@ -69,7 +69,9 @@ export function buildOrder(cabin, lines, point, parent) {
 export const WAITS = [10, 15, 20, 30]; // минуты, которые кассир ставит у «Пробит»
 
 export const freshOrders = (list, now) => (Array.isArray(list) ? list.filter((o) => freshOrder(o, now)) : []);
-export const ordersTotal = (list) => list.filter((o) => o.status !== 'cancelled').reduce((s, o) => s + o.total, 0);
+// Сумма всех заказов гостя без отменённых и без блюд, которых не было. off: наличие сейчас.
+export const ordersTotal = (list, off = new Set()) => list.filter((o) => o.status !== 'cancelled')
+  .reduce((s, o) => s + (o.lines ? sumWithout(o.lines, goneIds(o.lines, o.status, o.gone, off)) : o.total), 0);
 
 // Первый заказ этой кабинки с этого телефона: к нему цепляется дозаказ.
 export const parentFor = (list, cabin) => list.find((o) => o.cabin === cabin && o.status !== 'cancelled' && !o.parent)?.id
@@ -104,6 +106,16 @@ export const dishes = (n) => `${n} ${plural(n, 'блюдо', 'блюда', 'б�
 // Наличие: номера блюд, которых нет. Кассир ведёт их в menu/live, поле off.
 export const cleanOff = (off) => (Array.isArray(off) ? off.filter((id) => typeof id === 'string' && id.length <= 40) : []);
 export const offLines = (lines, off) => lines.filter((l) => off.has(l.id));
+
+// Каких блюд заказа нет. До «Пробит» решает наличие сейчас, после: список, который касса записала при пробитии.
+export function goneIds(items, status, gone, off) {
+  if (status === 'punched' || status === 'cancelled') return cleanOff(gone);
+  return items.filter((i) => off.has(i.id)).map((i) => i.id);
+}
+
+// Сумма и число блюд заказа без тех, которых нет.
+export const sumWithout = (items, gone) => items.filter((i) => !gone.includes(i.id)).reduce((s, i) => s + i.price * i.qty, 0);
+export const countWithout = (items, gone) => items.filter((i) => !gone.includes(i.id)).reduce((s, i) => s + i.qty, 0);
 
 // Ответ Firestore REST на menu/live: поле off, список строк. Документа нет: всё есть.
 export function offFromRest(json) {

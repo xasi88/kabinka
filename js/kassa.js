@@ -1,7 +1,7 @@
 // Экран кассы: вход Google, заказы за 12 часов, звук на новый заказ, смена статуса, наличие блюд.
-import { authApi, firestore } from './db.js?v=ab7f6d26';
-import { rub, dishes, WAITS, cleanOff } from './cart.js?v=ab7f6d26';
-import { cafe, sections, items } from './data.js?v=ab7f6d26';
+import { authApi, firestore } from './db.js?v=2e1789b8';
+import { rub, dishes, WAITS, cleanOff, goneIds, sumWithout, countWithout } from './cart.js?v=2e1789b8';
+import { cafe, sections, items } from './data.js?v=2e1789b8';
 
 const app = document.getElementById('app');
 const who = document.getElementById('who');
@@ -79,7 +79,9 @@ document.addEventListener('visibilitychange', () => {
 });
 
 function card(o) {
-  const n = o.items.reduce((s, i) => s + i.qty, 0);
+  // Блюда «Нет» в заказе зачёркнуты, сумма и число блюд без них.
+  const gone = goneIds(o.items, o.status, o.gone, off);
+  const n = countWithout(o.items, gone);
   const act = o.status === 'new' ? ['accepted', 'Принят'] : o.status === 'accepted' ? ['punched', 'Пробит'] : null;
   const chips = o.status === 'accepted'
     ? `<div class="chips"><span class="muted">Готово через</span>${WAITS.map((m) => `<button type="button" class="chip num${m === wait ? ' on' : ''}" data-wait="${m}">${m} мин</button>`).join('')}</div>` : '';
@@ -89,8 +91,8 @@ function card(o) {
   return `<article class="ord st-${o.status}${fresh.has(o.id) ? ' fresh' : ''}">`
     + `<div class="top"><b class="head">Кабинка ${o.cabin}</b>${o.parent ? '<span class="add-tag head">Дозаказ</span>' : ''}`
     + `${ready}<span class="num muted">${hhmm(o.createdAt)}</span></div>${chips}`
-    + `<ul>${o.items.map((i) => `<li${o.status !== 'punched' && off.has(i.id) ? ' class="gone"' : ''}><span>${esc(i.name)}${o.status !== 'punched' && off.has(i.id) ? ' <em>нет в наличии</em>' : ''}</span><span class="num">× ${i.qty}</span><span class="num">${rub(i.price * i.qty)}</span></li>`).join('')}</ul>`
-    + `<div class="sum"><span class="muted">${dishes(n)}</span><b class="num">${rub(o.total)}</b></div>`
+    + `<ul>${o.items.map((i) => `<li${gone.includes(i.id) ? ' class="gone"' : ''}><span>${esc(i.name)}${gone.includes(i.id) ? ' <em>нет в наличии</em>' : ''}</span><span class="num">× ${i.qty}</span><span class="num">${rub(i.price * i.qty)}</span></li>`).join('')}</ul>`
+    + `<div class="sum"><span class="muted">${dishes(n)}</span><b class="num">${gone.length ? `<s>${rub(o.total)}</s> ` : ''}${rub(sumWithout(o.items, gone))}</b></div>`
     + (btns ? `<div class="acts">${btns}</div>` : '') + '</article>';
 }
 
@@ -175,6 +177,9 @@ async function setStatus(id, status, btn) {
     const { f, db } = await firestore();
     const data = { status, updatedAt: f.serverTimestamp() };
     if (status === 'punched') data.waitMin = wait;
+    // Каких блюд не было при «Принят» и «Пробит»: пробитый заказ хранит верную сумму навсегда.
+    const o = orders.find((x) => x.id === id);
+    if (o && status !== 'cancelled') data.gone = goneIds(o.items, 'new', null, off);
     await f.updateDoc(f.doc(db, 'orders', id), data);
   } catch (err) {
     console.error(err);

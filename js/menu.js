@@ -1,12 +1,12 @@
 // Меню гостя: блюда, корзина, отправка на кассу, «Ваши заказы», дозаказ, время готовности, наличие.
-import { cafe, sections, items } from './data.js?v=ab7f6d26';
+import { cafe, sections, items } from './data.js?v=2e1789b8';
 import {
   addItem, removeItem, cartLines, count, total, cabinFromUrl, parseCabin,
   buildOrder, rub, dishes, freshOrder, freshOrders, ordersTotal, parentFor, statusText,
-  cleanOff, offLines, offFromRest,
-} from './cart.js?v=ab7f6d26';
-import { firestore } from './db.js?v=ab7f6d26';
-import { firebaseConfig } from './firebase-config.js?v=ab7f6d26';
+  cleanOff, offLines, offFromRest, goneIds, sumWithout,
+} from './cart.js?v=2e1789b8';
+import { firestore } from './db.js?v=2e1789b8';
+import { firebaseConfig } from './firebase-config.js?v=2e1789b8';
 
 const $ = (s) => document.querySelector(s);
 const store = {
@@ -61,7 +61,7 @@ function setOff(list) {
   store.set('sm-off', [...off]);
   refreshCtls();
   renderBar();
-  if (view === 'cart') renderSheet();
+  if (view === 'cart' || view === 'sent') renderSheet();
 }
 
 // Наличие вживую: кассир выключил блюдо, гость видит это сразу.
@@ -137,7 +137,10 @@ function renderBar() {
   bar.hidden = !count(ls) && !last;
 }
 
-function lineRow(l, edit) {
+function lineRow(l, edit, gone) {
+  if (gone) {
+    return `<div class="ln off"><div class="t"><h3 class="head"><s>${esc(l.name)} × ${l.qty}</s></h3><p class="no">Нет в наличии</p></div></div>`;
+  }
   if (edit && off.has(l.id)) {
     return `<div class="ln off"><div class="t"><h3 class="head">${esc(l.name)} × ${l.qty}</h3><p class="no">Нет в наличии</p></div>`
       + `<button type="button" class="drop" data-drop="${l.id}">Убрать</button></div>`;
@@ -146,10 +149,13 @@ function lineRow(l, edit) {
     + `<p class="num">${rub(l.price * l.qty)}</p></div>${edit ? `<div class="ctl" data-ctl="${l.id}">${stepper(l.id)}</div>` : ''}</div>`;
 }
 
+// Заказ гостя: блюда «Нет» зачёркнуты, сумма без них, как на кассе.
 function orderBlock(o) {
+  const gone = goneIds(o.lines, o.status, o.gone, off);
+  const sum = gone.length ? `<s>${rub(o.total)}</s> ${rub(sumWithout(o.lines, gone))}` : rub(o.total);
   return `<div class="og${o.status === 'cancelled' ? ' gone' : ''}"><div class="og-top"><b class="head">${o.parent ? 'Дозаказ' : 'Заказ'} в ${hhmm(o.at)}</b>`
-    + `<span class="num">${rub(o.total)}</span></div><p class="st st-${o.status}">${esc(stText(o))}</p>`
-    + `<div class="lines">${o.lines.map((l) => lineRow(l, false)).join('')}</div></div>`;
+    + `<span class="num">${sum}</span></div><p class="st st-${o.status}">${esc(stText(o))}</p>`
+    + `<div class="lines">${o.lines.map((l) => lineRow(l, false, gone.includes(l.id))).join('')}</div></div>`;
 }
 
 function sheetHtml() {
@@ -175,7 +181,7 @@ function sheetHtml() {
     const say = waiting.length ? `<p class="say">Подойдите к кассе и скажите: <b>«Кабинка ${waiting[0].cabin}»</b></p>` : '';
     return `<h2 class="head">${orders.length > 1 ? 'Ваши заказы' : 'Ваш заказ'}</h2>${say}`
       + orders.slice().reverse().map(orderBlock).join('')
-      + (orders.length > 1 ? `<div class="sum"><span>Всего</span><b class="num">${rub(ordersTotal(orders))}</b></div>` : '')
+      + (orders.length > 1 ? `<div class="sum"><span>Всего</span><b class="num">${rub(ordersTotal(orders, off))}</b></div>` : '')
       + '<button type="button" class="send head" data-more>Дозаказать</button>';
   }
   return '';
@@ -214,7 +220,7 @@ async function watchAll() {
         const i = orders.findIndex((x) => x.id === o.id);
         if (!s.exists() || i < 0) return;
         const d = s.data();
-        orders[i] = { ...orders[i], status: d.status, waitMin: d.waitMin, updatedMs: d.updatedAt ? d.updatedAt.toMillis() : undefined };
+        orders[i] = { ...orders[i], status: d.status, waitMin: d.waitMin, gone: d.gone, updatedMs: d.updatedAt ? d.updatedAt.toMillis() : undefined };
         saveOrders();
         renderBar();
         if (view === 'sent') renderSheet();
