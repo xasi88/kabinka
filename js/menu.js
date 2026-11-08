@@ -1,10 +1,10 @@
 // Меню гостя: блюда, корзина, отправка заказа на кассу, статус заказа.
-import { cafe, sections, items } from './data.js?v=e4622669';
+import { cafe, sections, items } from './data.js?v=e458b66d';
 import {
   addItem, removeItem, cartLines, count, total, cabinFromUrl, parseCabin,
-  buildOrder, rub, dishes, STATUS,
-} from './cart.js?v=e4622669';
-import { firestore } from './db.js?v=e4622669';
+  buildOrder, rub, dishes, STATUS, freshOrder,
+} from './cart.js?v=e458b66d';
+import { firestore } from './db.js?v=e458b66d';
 
 const $ = (s) => document.querySelector(s);
 const store = {
@@ -19,8 +19,17 @@ let cart = store.get('sm-cart') || {};
 const urlCabin = cabinFromUrl(location.search);
 let cabin = urlCabin ?? parseCabin(store.get('sm-cabin'));
 if (urlCabin) store.set('sm-cabin', urlCabin);
-let current = store.get('sm-order');
-let view = null; // null, 'cart', 'picker', 'sent'
+let current = freshOrder(store.get('sm-order'), Date.now());
+if (!current) store.del('sm-order');
+let view = null;
+let warmed = false;
+
+// Библиотека базы грузится заранее, чтобы «Отправить» срабатывало сразу.
+function warm() {
+  if (warmed) return;
+  warmed = true;
+  firestore().catch(() => { warmed = false; });
+} // null, 'cart', 'picker', 'sent'
 let sending = false;
 let error = '';
 let pendingRef = null;
@@ -38,11 +47,11 @@ function stepper(id) {
 function card(it) {
   const ctl = `<div class="ctl" data-ctl="${it.id}">${stepper(it.id)}</div>`;
   if (it.hit && it.photo) {
-    return `<article class="hero"><img src="${it.photo}" alt=""><div class="fade"></div>`
+    return `<article class="hero"><img src="img/b/${it.photo}.webp" alt="" width="800" height="560" fetchpriority="high" onerror="this.remove()"><div class="fade"></div>`
       + `<span class="tag head">Хит</span><div class="nm"><h3 class="head">${esc(it.name)}</h3>`
       + `<p class="num">${rub(it.price)}</p></div>${ctl}</article>`;
   }
-  return `<article class="it">${it.photo ? `<img src="${it.photo}" alt="" loading="lazy">` : ''}`
+  return `<article class="it">${it.photo ? `<img src="img/t/${it.photo}.webp" alt="" width="64" height="64" decoding="async" onerror="this.remove()">` : ''}`
     + `<div class="t"><h3 class="head">${esc(it.name)}</h3><p class="num">${rub(it.price)}</p></div>${ctl}</article>`;
 }
 
@@ -155,7 +164,7 @@ async function send() {
     const exists = retry && await withTimeout(f.getDoc(ref), 8000).then((s) => s.exists()).catch(() => false);
     if (!exists) await withTimeout(f.setDoc(ref, { ...order, createdAt: f.serverTimestamp() }), 12000);
     pendingRef = null;
-    current = { id: ref.id, cabin: order.cabin, lines: order.items, total: order.total, status: 'new' };
+    current = { id: ref.id, cabin: order.cabin, lines: order.items, total: order.total, status: 'new', at: Date.now() };
     store.set('sm-order', current);
     cart = {};
     store.set('sm-cart', cart);
@@ -175,7 +184,7 @@ document.addEventListener('click', (e) => {
   const t = e.target.closest('button, a, [data-close]');
   if (!t) return;
   const d = t.dataset;
-  if (d.add) { cart = addItem(cart, d.add); changed(); }
+  if (d.add) { cart = addItem(cart, d.add); changed(); warm(); }
   else if (d.del) { cart = removeItem(cart, d.del); changed(); }
   else if (d.cabin) {
     cabin = Number(d.cabin);
@@ -209,3 +218,5 @@ renderMenu();
 renderHeader();
 renderBar();
 watch();
+if (count(lines())) warm();
+else setTimeout(() => (window.requestIdleCallback ? window.requestIdleCallback(warm) : warm()), 2500);

@@ -1,5 +1,5 @@
-/* Брендбук «Сочный мощный», вариант «Угли». Значения только отсюда. */
-@import url("https://fonts.googleapis.com/css2?family=Oswald:wght@500;700&family=Golos+Text:wght@400;600&display=swap");
+/* Брендбук «Сочный мощный», вариант «Угли». Значения только отсюда.
+   Шрифты подключает <link> в каждой странице: так они грузятся сразу, а не после этого файла. */
 
 :root {
   --bg: #0d0c0b;
@@ -28,5 +28,6 @@
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { background: var(--bg); color: var(--text); font-family: var(--font-body); -webkit-tap-highlight-color: transparent; }
+button, a { touch-action: manipulation; } /* без задержки и увеличения от двойного нажатия */
 .num { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .head { font-family: var(--font-head); font-weight: 700; text-transform: uppercase; }

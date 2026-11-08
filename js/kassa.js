@@ -1,12 +1,15 @@
 // Экран кассы: вход Google, заказы за 12 часов, звук на новый заказ, смена статуса.
-import { authApi, firestore } from './db.js?v=e4622669';
-import { rub, dishes } from './cart.js?v=e4622669';
-import { cafe } from './data.js?v=e4622669';
+import { authApi, firestore } from './db.js?v=e458b66d';
+import { rub, dishes } from './cart.js?v=e458b66d';
+import { cafe } from './data.js?v=e458b66d';
 
 const app = document.getElementById('app');
 const who = document.getElementById('who');
 const out = document.getElementById('out');
 const toastEl = document.getElementById('toast');
+const soundEl = document.getElementById('sound');
+const netEl = document.getElementById('net');
+let signed = false;
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const hhmm = (ts) => (ts ? ts.toDate().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : '');
 
@@ -49,10 +52,21 @@ function beep() {
   } catch { /* без звука */ }
 }
 
+// Браузер не даёт звук без нажатия на экран. После обновления страницы просим нажать.
+function soundCheck() {
+  soundEl.hidden = !signed || (!!audio && audio.state === 'running');
+}
+
+window.addEventListener('offline', () => { netEl.hidden = !signed; });
+
 async function keepAwake() {
   try { wake = await navigator.wakeLock?.request('screen'); } catch { /* экран может погаснуть */ }
 }
-document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && wake) keepAwake(); });
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible') return;
+  if (wake) keepAwake();
+  soundCheck();
+});
 
 function card(o) {
   const n = o.items.reduce((s, i) => s + i.qty, 0);
@@ -71,7 +85,8 @@ function render() {
   document.title = `${nNew ? `(${nNew}) ` : ''}Касса: ${cafe.name}`;
   app.innerHTML = '<div class="cols">' + COLS.map((c) => {
     const list = orders.filter((o) => o.status === c.key)
-      .sort((a, b) => c.sort * ((a.createdAt?.toMillis() || 0) - (b.createdAt?.toMillis() || 0)));
+      .sort((a, b) => c.sort * ((a.createdAt?.toMillis() || 0) - (b.createdAt?.toMillis() || 0)))
+      .slice(0, c.key === 'punched' ? 30 : 100);
     return `<section class="col col-${c.key}"><h2 class="head">${c.title} <span class="num">${list.length}</span></h2>`
       + (list.length ? list.map(card).join('') : `<p class="muted">${c.empty}</p>`) + '</section>';
   }).join('') + '</div>';
@@ -89,7 +104,8 @@ async function subscribe(user) {
   const since = f.Timestamp.fromMillis(Date.now() - 12 * 3600 * 1000);
   const q = f.query(f.collection(db, 'orders'), f.where('createdAt', '>=', since), f.orderBy('createdAt', 'desc'), f.limit(150));
   app.innerHTML = '<p class="muted center">Загрузка заказов…</p>';
-  unsub = f.onSnapshot(q, (snap) => {
+  unsub = f.onSnapshot(q, { includeMetadataChanges: true }, (snap) => {
+    netEl.hidden = !snap.metadata.fromCache;
     const added = snap.docChanges().filter((ch) => ch.type === 'added' && ch.doc.data().status === 'new').map((ch) => ch.doc.id);
     orders = snap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((o) => o.status !== 'cancelled');
     if (!first && added.length) {
@@ -136,15 +152,22 @@ if (api) {
     first = true;
     out.hidden = !user;
     who.textContent = user ? user.email : '';
+    signed = !!user;
+    netEl.hidden = true;
+    soundCheck();
     if (user) subscribe(user); else loginView();
   });
 
   document.addEventListener('click', async (e) => {
     const b = e.target.closest('button');
     if (!b) return;
-    try { audio ||= new AudioContext(); } catch { /* без звука */ }
+    // Без await: окно входа Google должно открыться в том же нажатии.
+    try { audio ||= new AudioContext(); audio.resume().then(soundCheck, () => {}); } catch { /* без звука */ }
     if (!wake) keepAwake();
-    if (b.id === 'in') {
+    soundCheck();
+    if (b.id === 'sound') {
+      beep();
+    } else if (b.id === 'in') {
       try { await m.signInWithPopup(auth, new m.GoogleAuthProvider()); } catch (err) {
         if (err.code !== 'auth/popup-closed-by-user') loginView('Вход не удался. Попробуйте ещё раз.');
       }

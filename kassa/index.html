@@ -6,16 +6,21 @@
 <meta name="theme-color" content="#0d0c0b">
 <meta name="robots" content="noindex">
 <title>Касса: Сочный Мощный 2</title>
-<link rel="stylesheet" href="../base.css?v=e4622669">
-<link rel="stylesheet" href="../css/kassa.css?v=e4622669">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;700&family=Golos+Text:wght@400;600&display=swap">
+<link rel="stylesheet" href="../base.css?v=e458b66d">
+<link rel="stylesheet" href="../css/kassa.css?v=e458b66d">
 </head>
 <body>
 <header class="kh">
   <div class="wm"><i>2</i><div><span>Касса</span><span>Сочный Мощный</span></div></div>
   <div class="who"><span id="who" class="muted"></span><button id="out" class="ghost" type="button" hidden>Выйти</button></div>
 </header>
+<button id="sound" class="banner" type="button" hidden>Нажмите, чтобы включить звук новых заказов</button>
+<div id="net" class="banner off" hidden>Нет связи с базой. Новые заказы придут, когда связь вернётся.</div>
 <main id="app"><p class="muted center">Загрузка…</p></main>
 <div id="toast" class="toast" hidden></div>
-<script type="module" src="../js/kassa.js?v=e4622669"></script>
+<script type="module" src="../js/kassa.js?v=e458b66d"></script>
 </body>
 </html>

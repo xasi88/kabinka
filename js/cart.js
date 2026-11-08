@@ -2,6 +2,12 @@
 
 export const MAX_QTY = 20;
 export const MAX_CABIN = 99;
+export const ORDER_TTL = 6 * 3600 * 1000; // статус заказа гость видит 6 часов
+
+// Сохранённый заказ гостя: старый (вчерашний) не показываем.
+export function freshOrder(o, now) {
+  return o && typeof o.id === 'string' && typeof o.at === 'number' && now - o.at >= 0 && now - o.at < ORDER_TTL ? o : null;
+}
 
 export const STATUS = {
   new: 'Ждёт кассира',

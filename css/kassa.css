@@ -45,6 +45,10 @@ button:disabled { opacity: .5; }
 .acts { display: flex; gap: var(--s2); margin-top: var(--s4); }
 .acts .act { flex: 1; }
 
+.banner { display: block; width: 100%; min-height: 56px; padding: var(--s3) var(--s4); background: var(--red); color: var(--on-red); font: 600 18px var(--font-body); text-align: center; }
+.banner[hidden] { display: none; }
+.banner.off { background: var(--surface); color: var(--text); border-bottom: 2px solid var(--red); }
+
 .toast { position: fixed; left: 50%; bottom: var(--s6); transform: translateX(-50%); max-width: calc(100% - 2 * var(--s4)); padding: var(--s3) var(--s4); border-radius: var(--r); background: var(--red); color: var(--on-red); z-index: 20; }
 .toast[hidden] { display: none; }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
