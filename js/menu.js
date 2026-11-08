@@ -1,10 +1,10 @@
-// Меню гостя: блюда, корзина, отправка заказа на кассу, статус заказа.
-import { cafe, sections, items } from './data.js?v=31896029';
+// Меню гостя: блюда, корзина, отправка на кассу, «Ваши заказы», дозаказ, время готовности.
+import { cafe, sections, items } from './data.js?v=927b8f56';
 import {
   addItem, removeItem, cartLines, count, total, cabinFromUrl, parseCabin,
-  buildOrder, rub, dishes, STATUS, freshOrder,
-} from './cart.js?v=31896029';
-import { firestore } from './db.js?v=31896029';
+  buildOrder, rub, dishes, freshOrder, freshOrders, ordersTotal, parentFor, statusText,
+} from './cart.js?v=927b8f56';
+import { firestore } from './db.js?v=927b8f56';
 
 const $ = (s) => document.querySelector(s);
 const store = {
@@ -14,26 +14,39 @@ const store = {
 };
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const withTimeout = (p, ms) => Promise.race([p, new Promise((_, r) => setTimeout(() => r(new Error('timeout')), ms))]);
+const hhmm = (ms) => new Date(ms).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+const stText = (o) => statusText(o, Date.now(), hhmm);
 
 let cart = store.get('sm-cart') || {};
 const urlCabin = cabinFromUrl(location.search);
 let cabin = urlCabin ?? parseCabin(store.get('sm-cabin'));
 if (urlCabin) store.set('sm-cabin', urlCabin);
-let current = freshOrder(store.get('sm-order'), Date.now());
-if (!current) store.del('sm-order');
-let view = null;
+
+// Заказы с этого телефона за 6 часов. Старый формат (один заказ) переносим в список.
+function loadOrders() {
+  const list = store.get('sm-orders');
+  if (Array.isArray(list)) return list;
+  const one = freshOrder(store.get('sm-order'), Date.now());
+  store.del('sm-order');
+  return one ? [one] : [];
+}
+let orders = freshOrders(loadOrders(), Date.now());
+const saveOrders = () => store.set('sm-orders', orders);
+saveOrders();
+
+let view = null; // null, 'cart', 'picker', 'sent'
+let sending = false;
+let error = '';
+let pendingRef = null;
 let warmed = false;
+const unsubs = new Map();
 
 // Библиотека базы грузится заранее, чтобы «Отправить» срабатывало сразу.
 function warm() {
   if (warmed) return;
   warmed = true;
   firestore().catch(() => { warmed = false; });
-} // null, 'cart', 'picker', 'sent'
-let sending = false;
-let error = '';
-let pendingRef = null;
-let unsub = null;
+}
 
 const lines = () => cartLines(cart, items);
 
@@ -75,19 +88,26 @@ function renderHeader() {
 function renderBar() {
   const bar = $('#bar');
   const ls = lines();
+  const last = orders[orders.length - 1];
   if (count(ls)) {
-    bar.innerHTML = `<b class="head">Отправить на кассу</b><span class="num">${dishes(count(ls))} · ${rub(total(ls))}</span>`;
+    bar.innerHTML = `<b class="head">${orders.length ? 'Отправить дозаказ' : 'Отправить на кассу'}</b><span class="num">${dishes(count(ls))} · ${rub(total(ls))}</span>`;
     bar.dataset.go = 'cart';
-  } else if (current) {
-    bar.innerHTML = `<b class="head">Ваш заказ</b><span>${STATUS[current.status] || ''}</span>`;
+  } else if (last) {
+    bar.innerHTML = `<b class="head">${orders.length > 1 ? 'Ваши заказы' : 'Ваш заказ'}</b><span>${esc(stText(last))}</span>`;
     bar.dataset.go = 'sent';
   }
-  bar.hidden = !count(ls) && !current;
+  bar.hidden = !count(ls) && !last;
 }
 
 function lineRow(l, ctl) {
   return `<div class="ln"><div class="t"><h3 class="head">${esc(l.name)}${ctl ? '' : ` × ${l.qty}`}</h3>`
     + `<p class="num">${rub(l.price * l.qty)}</p></div>${ctl ? `<div class="ctl" data-ctl="${l.id}">${stepper(l.id)}</div>` : ''}</div>`;
+}
+
+function orderBlock(o) {
+  return `<div class="og${o.status === 'cancelled' ? ' gone' : ''}"><div class="og-top"><b class="head">${o.parent ? 'Дозаказ' : 'Заказ'} в ${hhmm(o.at)}</b>`
+    + `<span class="num">${rub(o.total)}</span></div><p class="st st-${o.status}">${esc(stText(o))}</p>`
+    + `<div class="lines">${o.lines.map((l) => lineRow(l, false)).join('')}</div></div>`;
 }
 
 function sheetHtml() {
@@ -98,20 +118,21 @@ function sheetHtml() {
   }
   if (view === 'cart') {
     const ls = lines();
-    const label = sending ? 'Отправляем…' : cabin ? 'Отправить на кассу' : 'Выбрать кабинку';
-    return `<h2 class="head">Проверьте заказ</h2><button type="button" class="cabrow" data-view="picker">`
+    const label = sending ? 'Отправляем…' : !cabin ? 'Выбрать кабинку' : orders.length ? 'Отправить дозаказ' : 'Отправить на кассу';
+    return `<h2 class="head">${orders.length ? 'Проверьте дозаказ' : 'Проверьте заказ'}</h2><button type="button" class="cabrow" data-view="picker">`
       + `<b>${cabin ? `Кабинка ${cabin}` : 'Кабинка не выбрана'}</b><span>Сменить</span></button>`
       + `<div class="lines">${ls.map((l) => lineRow(l, true)).join('')}</div>`
       + `<div class="sum"><span>Итого</span><b class="num">${rub(total(ls))}</b></div>`
       + (error ? `<p class="err">${error}</p>` : '')
       + `<button type="button" class="send head" data-send${sending || !ls.length ? ' disabled' : ''}>${label}</button>`;
   }
-  if (view === 'sent' && current) {
-    return `<h2 class="head">Заказ отправлен</h2><p class="say">Подойдите к кассе и скажите: <b>«Кабинка ${current.cabin}»</b></p>`
-      + `<p class="st head st-${current.status}">${STATUS[current.status] || ''}</p>`
-      + `<div class="lines">${current.lines.map((l) => lineRow(l, false)).join('')}</div>`
-      + `<div class="sum"><span>Итого</span><b class="num">${rub(current.total)}</b></div>`
-      + '<button type="button" class="send head" data-new>Новый заказ</button>';
+  if (view === 'sent' && orders.length) {
+    const waiting = orders.filter((o) => o.status === 'new');
+    const say = waiting.length ? `<p class="say">Подойдите к кассе и скажите: <b>«Кабинка ${waiting[0].cabin}»</b></p>` : '';
+    return `<h2 class="head">${orders.length > 1 ? 'Ваши заказы' : 'Ваш заказ'}</h2>${say}`
+      + orders.slice().reverse().map(orderBlock).join('')
+      + (orders.length > 1 ? `<div class="sum"><span>Всего</span><b class="num">${rub(ordersTotal(orders))}</b></div>` : '')
+      + '<button type="button" class="send head" data-more>Дозаказать</button>';
   }
   return '';
 }
@@ -119,10 +140,13 @@ function sheetHtml() {
 function renderSheet() {
   const sh = $('#sheet');
   const html = view ? sheetHtml() : '';
+  const top = sh.querySelector('.panel')?.scrollTop || 0; // обновление статуса не сбрасывает прокрутку
+  const was = !sh.hidden;
   sh.hidden = !html;
   document.body.classList.toggle('lock', !!html);
-  sh.innerHTML = html ? `<div class="shade" data-close></div><div class="panel" role="dialog" aria-modal="true">`
+  sh.innerHTML = html ? `<div class="shade" data-close></div><div class="panel${was ? ' still' : ''}" role="dialog" aria-modal="true">`
     + `<button type="button" class="x" data-close aria-label="Закрыть">×</button>${html}</div>` : '';
+  if (html && was) sh.querySelector('.panel').scrollTop = top;
 }
 
 function changed() {
@@ -134,25 +158,31 @@ function changed() {
   renderSheet();
 }
 
-async function watch() {
-  if (!current) return;
+// Статус каждого заказа вживую: «Принят», «Пробит» и время готовности.
+async function watchAll() {
+  const todo = orders.filter((o) => !unsubs.has(o.id) && o.status !== 'cancelled');
+  if (!todo.length) return;
   try {
     const { f, db } = await firestore();
-    unsub?.();
-    unsub = f.onSnapshot(f.doc(db, 'orders', current.id), (s) => {
-      if (!s.exists() || !current) return;
-      current = { ...current, status: s.data().status };
-      store.set('sm-order', current);
-      renderBar();
-      if (view === 'sent') renderSheet();
-    }, (err) => console.error(err));
+    todo.forEach((o) => {
+      if (unsubs.has(o.id)) return;
+      unsubs.set(o.id, f.onSnapshot(f.doc(db, 'orders', o.id), (s) => {
+        const i = orders.findIndex((x) => x.id === o.id);
+        if (!s.exists() || i < 0) return;
+        const d = s.data();
+        orders[i] = { ...orders[i], status: d.status, waitMin: d.waitMin, updatedMs: d.updatedAt ? d.updatedAt.toMillis() : undefined };
+        saveOrders();
+        renderBar();
+        if (view === 'sent') renderSheet();
+      }, (err) => console.error(err)));
+    });
   } catch (err) { console.error(err); }
 }
 
 async function send() {
   if (sending) return;
   let order;
-  try { order = buildOrder(cabin, lines(), cafe.point); } catch { return; }
+  try { order = buildOrder(cabin, lines(), cafe.point, parentFor(orders, cabin)); } catch { return; }
   sending = true;
   error = '';
   renderSheet();
@@ -164,13 +194,13 @@ async function send() {
     const exists = retry && await withTimeout(f.getDoc(ref), 8000).then((s) => s.exists()).catch(() => false);
     if (!exists) await withTimeout(f.setDoc(ref, { ...order, createdAt: f.serverTimestamp() }), 12000);
     pendingRef = null;
-    current = { id: ref.id, cabin: order.cabin, lines: order.items, total: order.total, status: 'new', at: Date.now() };
-    store.set('sm-order', current);
+    orders.push({ id: ref.id, cabin: order.cabin, lines: order.items, total: order.total, status: 'new', at: Date.now(), parent: order.parent || null });
+    saveOrders();
     cart = {};
     store.set('sm-cart', cart);
     document.querySelectorAll('#list [data-ctl]').forEach((c) => { c.innerHTML = stepper(c.dataset.ctl); });
     view = 'sent';
-    watch();
+    watchAll();
   } catch (err) {
     console.error(err);
     error = 'Не отправилось. Проверьте интернет и нажмите ещё раз.';
@@ -198,15 +228,7 @@ document.addEventListener('click', (e) => {
   else if (t.id === 'cab') { view = 'picker'; renderSheet(); }
   else if ('close' in d) { view = null; error = ''; renderSheet(); }
   else if ('send' in d) { if (cabin) send(); else { view = 'picker'; renderSheet(); } }
-  else if ('new' in d) {
-    unsub?.();
-    unsub = null;
-    current = null;
-    store.del('sm-order');
-    view = null;
-    renderBar();
-    renderSheet();
-  }
+  else if ('more' in d) { view = null; renderSheet(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
   else if (d.tab) setTab(d.tab);
 });
 
@@ -214,10 +236,17 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && view) { view = null; renderSheet(); }
 });
 
+// «Примерно к 14:35» сменится на «Чуть дольше обычного», когда время выйдет.
+setInterval(() => {
+  if (!orders.some((o) => o.status === 'punched')) return;
+  renderBar();
+  if (view === 'sent') renderSheet();
+}, 30000);
+
 renderMenu();
 renderHeader();
 renderBar();
-watch();
+watchAll();
 if (count(lines())) warm();
 // Свободная минута браузера может не наступить: предел 1,5 с (проверено 2026-11-08).
 else setTimeout(() => (window.requestIdleCallback ? window.requestIdleCallback(warm, { timeout: 1500 }) : warm()), 2000);

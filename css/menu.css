@@ -56,7 +56,14 @@ main { padding: 0 var(--s4); }
 .panel { position: absolute; left: 0; right: 0; bottom: 0; max-width: 560px; max-height: 88vh; margin: 0 auto; overflow-y: auto; padding: var(--s6) var(--s4) calc(var(--s4) + env(safe-area-inset-bottom)); border-radius: var(--r) var(--r) 0 0; background: var(--surface); animation: up var(--t) ease-out; }
 .panel > h2 { font-size: 26px; margin: 0 56px var(--s3) 0; }
 .x { position: absolute; top: var(--s3); right: var(--s3); width: var(--tap); height: var(--tap); font-size: 30px; color: var(--muted); }
+.panel.still { animation: none; }
 .muted { color: var(--muted); }
+.og { margin-top: var(--s4); padding: var(--s3) var(--s4); border-radius: var(--r); background: var(--bg); }
+.og.gone { opacity: .5; }
+.og-top { display: flex; justify-content: space-between; align-items: baseline; gap: var(--s3); }
+.og-top b { font-size: 20px; }
+.og .st { margin: var(--s1) 0 var(--s2); font-size: 18px; }
+.og .ln { min-height: 48px; }
 .cabrow { width: 100%; min-height: 56px; margin-bottom: var(--s2); display: flex; align-items: center; justify-content: space-between; padding: 0 var(--s4); border: 2px solid var(--red); border-radius: var(--r); }
 .cabrow b { font: 700 20px var(--font-head); text-transform: uppercase; }
 .cabrow span { color: var(--muted); }

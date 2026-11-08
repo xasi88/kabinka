@@ -1,7 +1,7 @@
 // Экран кассы: вход Google, заказы за 12 часов, звук на новый заказ, смена статуса.
-import { authApi, firestore } from './db.js?v=31896029';
-import { rub, dishes } from './cart.js?v=31896029';
-import { cafe } from './data.js?v=31896029';
+import { authApi, firestore } from './db.js?v=927b8f56';
+import { rub, dishes, WAITS } from './cart.js?v=927b8f56';
+import { cafe } from './data.js?v=927b8f56';
 
 const app = document.getElementById('app');
 const who = document.getElementById('who');
@@ -26,6 +26,10 @@ let audio = null;
 let wake = null;
 const fresh = new Set();
 const armed = new Map();
+// Время готовности, которое кассир ставит у «Пробит». Касса помнит прошлый выбор.
+let wait = 15;
+try { wait = WAITS.includes(Number(localStorage.getItem('sm-wait'))) ? Number(localStorage.getItem('sm-wait')) : 15; } catch { /* по умолчанию 15 */ }
+const at = (o) => (o.updatedAt && o.waitMin ? hhmm({ toDate: () => new Date(o.updatedAt.toMillis() + o.waitMin * 60000) }) : '');
 
 function toast(text) {
   toastEl.textContent = text;
@@ -71,10 +75,14 @@ document.addEventListener('visibilitychange', () => {
 function card(o) {
   const n = o.items.reduce((s, i) => s + i.qty, 0);
   const act = o.status === 'new' ? ['accepted', 'Принят'] : o.status === 'accepted' ? ['punched', 'Пробит'] : null;
-  const btns = (act ? `<button type="button" class="act head" data-set="${act[0]}" data-id="${o.id}">${act[1]}</button>` : '')
+  const chips = o.status === 'accepted'
+    ? `<div class="chips"><span class="muted">Готово через</span>${WAITS.map((m) => `<button type="button" class="chip num${m === wait ? ' on' : ''}" data-wait="${m}">${m} мин</button>`).join('')}</div>` : '';
+  const btns = (act ? `<button type="button" class="act head" data-set="${act[0]}" data-id="${o.id}">${act[1]}${act[0] === 'punched' ? ` · ${wait} мин` : ''}</button>` : '')
     + (o.status !== 'punched' ? `<button type="button" class="ghost" data-cancel="${o.id}">${armed.has(o.id) ? 'Точно отменить?' : 'Отменить'}</button>` : '');
+  const ready = o.status === 'punched' && at(o) ? `<span class="ready num">к ${at(o)}</span>` : '';
   return `<article class="ord st-${o.status}${fresh.has(o.id) ? ' fresh' : ''}">`
-    + `<div class="top"><b class="head">Кабинка ${o.cabin}</b><span class="num muted">${hhmm(o.createdAt)}</span></div>`
+    + `<div class="top"><b class="head">Кабинка ${o.cabin}</b>${o.parent ? '<span class="add-tag head">Дозаказ</span>' : ''}`
+    + `${ready}<span class="num muted">${hhmm(o.createdAt)}</span></div>${chips}`
     + `<ul>${o.items.map((i) => `<li><span>${esc(i.name)}</span><span class="num">× ${i.qty}</span><span class="num">${rub(i.price * i.qty)}</span></li>`).join('')}</ul>`
     + `<div class="sum"><span class="muted">${dishes(n)}</span><b class="num">${rub(o.total)}</b></div>`
     + (btns ? `<div class="acts">${btns}</div>` : '') + '</article>';
@@ -127,7 +135,9 @@ async function setStatus(id, status, btn) {
   btn.disabled = true;
   try {
     const { f, db } = await firestore();
-    await f.updateDoc(f.doc(db, 'orders', id), { status, updatedAt: f.serverTimestamp() });
+    const data = { status, updatedAt: f.serverTimestamp() };
+    if (status === 'punched') data.waitMin = wait;
+    await f.updateDoc(f.doc(db, 'orders', id), data);
   } catch (err) {
     console.error(err);
     btn.disabled = false;
@@ -173,6 +183,10 @@ if (api) {
       }
     } else if (b.id === 'out') {
       m.signOut(auth);
+    } else if (b.dataset.wait) {
+      wait = Number(b.dataset.wait);
+      try { localStorage.setItem('sm-wait', String(wait)); } catch { /* без памяти браузера */ }
+      render();
     } else if (b.dataset.set) {
       setStatus(b.dataset.id, b.dataset.set, b);
     } else if (b.dataset.cancel) {

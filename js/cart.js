@@ -51,16 +51,40 @@ export function cabinFromUrl(search) {
 }
 
 // Заказ для базы. Время ставит база (serverTimestamp), его добавляет страница.
-export function buildOrder(cabin, lines, point) {
+// parent: номер первого заказа этой компании, если это дозаказ.
+export function buildOrder(cabin, lines, point, parent) {
   if (!parseCabin(cabin)) throw new Error('Нет номера кабинки');
   if (!lines.length) throw new Error('Корзина пуста');
-  return {
+  const order = {
     cabin,
     items: lines.map(({ id, name, price, qty }) => ({ id, name, price, qty })),
     total: total(lines),
     status: 'new',
     point,
   };
+  if (parent) order.parent = parent;
+  return order;
+}
+
+export const WAITS = [10, 15, 20, 30]; // минуты, которые кассир ставит у «Пробит»
+
+export const freshOrders = (list, now) => (Array.isArray(list) ? list.filter((o) => freshOrder(o, now)) : []);
+export const ordersTotal = (list) => list.filter((o) => o.status !== 'cancelled').reduce((s, o) => s + o.total, 0);
+
+// Первый заказ этой кабинки с этого телефона: к нему цепляется дозаказ.
+export const parentFor = (list, cabin) => list.find((o) => o.cabin === cabin && o.status !== 'cancelled' && !o.parent)?.id
+  || list.find((o) => o.cabin === cabin && o.status !== 'cancelled')?.id || null;
+
+// Когда будет готово: время пробития (база) плюс минуты, которые выбрал кассир.
+export function readyAt(o) {
+  return o && o.status === 'punched' && Number.isInteger(o.waitMin) && typeof o.updatedMs === 'number'
+    ? o.updatedMs + o.waitMin * 60000 : null;
+}
+
+export function statusText(o, now, hhmm) {
+  const at = readyAt(o);
+  if (at === null) return STATUS[o.status] || '';
+  return now < at ? `Готовим. Примерно к ${hhmm(at)}` : 'Чуть дольше обычного, уже скоро';
 }
 
 export function rub(n) {
