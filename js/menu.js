@@ -1,10 +1,12 @@
-// Меню гостя: блюда, корзина, отправка на кассу, «Ваши заказы», дозаказ, время готовности.
-import { cafe, sections, items } from './data.js?v=927b8f56';
+// Меню гостя: блюда, корзина, отправка на кассу, «Ваши заказы», дозаказ, время готовности, наличие.
+import { cafe, sections, items } from './data.js?v=ab7f6d26';
 import {
   addItem, removeItem, cartLines, count, total, cabinFromUrl, parseCabin,
   buildOrder, rub, dishes, freshOrder, freshOrders, ordersTotal, parentFor, statusText,
-} from './cart.js?v=927b8f56';
-import { firestore } from './db.js?v=927b8f56';
+  cleanOff, offLines, offFromRest,
+} from './cart.js?v=ab7f6d26';
+import { firestore } from './db.js?v=ab7f6d26';
+import { firebaseConfig } from './firebase-config.js?v=ab7f6d26';
 
 const $ = (s) => document.querySelector(s);
 const store = {
@@ -40,15 +42,50 @@ let error = '';
 let pendingRef = null;
 let warmed = false;
 const unsubs = new Map();
+// Блюда, которых нет: их выключает кассир. Прошлый список из памяти браузера, пока не пришёл новый.
+let off = new Set(cleanOff(store.get('sm-off')));
+let liveOff = false;
 
 // Библиотека базы грузится заранее, чтобы «Отправить» срабатывало сразу.
 function warm() {
   if (warmed) return;
   warmed = true;
-  firestore().catch(() => { warmed = false; });
+  firestore().then(watchMenu).catch(() => { warmed = false; });
 }
 
 const lines = () => cartLines(cart, items);
+const bad = () => offLines(lines(), off);
+
+function setOff(list) {
+  off = new Set(cleanOff(list));
+  store.set('sm-off', [...off]);
+  refreshCtls();
+  renderBar();
+  if (view === 'cart') renderSheet();
+}
+
+// Наличие вживую: кассир выключил блюдо, гость видит это сразу.
+function watchMenu({ f, db }) {
+  f.onSnapshot(f.doc(db, 'menu', 'live'), (s) => {
+    liveOff = true;
+    setOff(s.exists() ? s.data().off : []);
+  }, (err) => console.error(err));
+}
+
+// Первый список без библиотеки базы: короткий запрос, ответ за доли секунды.
+fetch(`https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents/menu/live?mask.fieldPaths=off`)
+  .then((r) => (r.ok || r.status === 404 ? r.json() : Promise.reject(r.status)))
+  .then((j) => { if (!liveOff) setOff(offFromRest(j)); })
+  .catch(() => { /* остаётся прошлый список */ });
+
+const ctl = (id) => (off.has(id) ? '<span class="no">Нет в наличии</span>' : stepper(id));
+
+function refreshCtls() {
+  document.querySelectorAll('#list [data-ctl]').forEach((c) => {
+    c.innerHTML = ctl(c.dataset.ctl);
+    c.closest('article').classList.toggle('off', off.has(c.dataset.ctl));
+  });
+}
 
 function stepper(id) {
   const q = cart[id] || 0;
@@ -58,14 +95,15 @@ function stepper(id) {
 }
 
 function card(it) {
-  const ctl = `<div class="ctl" data-ctl="${it.id}">${stepper(it.id)}</div>`;
+  const box = `<div class="ctl" data-ctl="${it.id}">${ctl(it.id)}</div>`;
+  const no = off.has(it.id) ? ' off' : '';
   if (it.hit && it.photo) {
-    return `<article class="hero"><img src="img/b/${it.photo}.webp" alt="" width="800" height="560" fetchpriority="high" onerror="this.remove()"><div class="fade"></div>`
+    return `<article class="hero${no}"><img src="img/b/${it.photo}.webp" alt="" width="800" height="560" fetchpriority="high" onerror="this.remove()"><div class="fade"></div>`
       + `<span class="tag head">Хит</span><div class="nm"><h3 class="head">${esc(it.name)}</h3>`
-      + `<p class="num">${rub(it.price)}</p></div>${ctl}</article>`;
+      + `<p class="num">${rub(it.price)}</p></div>${box}</article>`;
   }
-  return `<article class="it">${it.photo ? `<img src="img/t/${it.photo}.webp" alt="" width="64" height="64" decoding="async" onerror="this.remove()">` : ''}`
-    + `<div class="t"><h3 class="head">${esc(it.name)}</h3><p class="num">${rub(it.price)}</p></div>${ctl}</article>`;
+  return `<article class="it${no}">${it.photo ? `<img src="img/t/${it.photo}.webp" alt="" width="64" height="64" decoding="async" onerror="this.remove()">` : ''}`
+    + `<div class="t"><h3 class="head">${esc(it.name)}</h3><p class="num">${rub(it.price)}</p></div>${box}</article>`;
 }
 
 function renderMenu() {
@@ -99,9 +137,13 @@ function renderBar() {
   bar.hidden = !count(ls) && !last;
 }
 
-function lineRow(l, ctl) {
-  return `<div class="ln"><div class="t"><h3 class="head">${esc(l.name)}${ctl ? '' : ` × ${l.qty}`}</h3>`
-    + `<p class="num">${rub(l.price * l.qty)}</p></div>${ctl ? `<div class="ctl" data-ctl="${l.id}">${stepper(l.id)}</div>` : ''}</div>`;
+function lineRow(l, edit) {
+  if (edit && off.has(l.id)) {
+    return `<div class="ln off"><div class="t"><h3 class="head">${esc(l.name)} × ${l.qty}</h3><p class="no">Нет в наличии</p></div>`
+      + `<button type="button" class="drop" data-drop="${l.id}">Убрать</button></div>`;
+  }
+  return `<div class="ln"><div class="t"><h3 class="head">${esc(l.name)}${edit ? '' : ` × ${l.qty}`}</h3>`
+    + `<p class="num">${rub(l.price * l.qty)}</p></div>${edit ? `<div class="ctl" data-ctl="${l.id}">${stepper(l.id)}</div>` : ''}</div>`;
 }
 
 function orderBlock(o) {
@@ -118,13 +160,15 @@ function sheetHtml() {
   }
   if (view === 'cart') {
     const ls = lines();
+    const gone = bad().length;
     const label = sending ? 'Отправляем…' : !cabin ? 'Выбрать кабинку' : orders.length ? 'Отправить дозаказ' : 'Отправить на кассу';
     return `<h2 class="head">${orders.length ? 'Проверьте дозаказ' : 'Проверьте заказ'}</h2><button type="button" class="cabrow" data-view="picker">`
       + `<b>${cabin ? `Кабинка ${cabin}` : 'Кабинка не выбрана'}</b><span>Сменить</span></button>`
       + `<div class="lines">${ls.map((l) => lineRow(l, true)).join('')}</div>`
       + `<div class="sum"><span>Итого</span><b class="num">${rub(total(ls))}</b></div>`
+      + (gone ? '<p class="err">Пока вы выбирали, это закончилось. Уберите из заказа, и можно отправлять.</p>' : '')
       + (error ? `<p class="err">${error}</p>` : '')
-      + `<button type="button" class="send head" data-send${sending || !ls.length ? ' disabled' : ''}>${label}</button>`;
+      + `<button type="button" class="send head" data-send${sending || !ls.length || gone ? ' disabled' : ''}>${label}</button>`;
   }
   if (view === 'sent' && orders.length) {
     const waiting = orders.filter((o) => o.status === 'new');
@@ -152,7 +196,7 @@ function renderSheet() {
 function changed() {
   store.set('sm-cart', cart);
   pendingRef = null;
-  document.querySelectorAll('#list [data-ctl]').forEach((c) => { c.innerHTML = stepper(c.dataset.ctl); });
+  refreshCtls();
   if (view === 'cart' && !count(lines())) view = null;
   renderBar();
   renderSheet();
@@ -180,7 +224,7 @@ async function watchAll() {
 }
 
 async function send() {
-  if (sending) return;
+  if (sending || bad().length) return;
   let order;
   try { order = buildOrder(cabin, lines(), cafe.point, parentFor(orders, cabin)); } catch { return; }
   sending = true;
@@ -198,7 +242,7 @@ async function send() {
     saveOrders();
     cart = {};
     store.set('sm-cart', cart);
-    document.querySelectorAll('#list [data-ctl]').forEach((c) => { c.innerHTML = stepper(c.dataset.ctl); });
+    refreshCtls();
     view = 'sent';
     watchAll();
   } catch (err) {
@@ -214,8 +258,9 @@ document.addEventListener('click', (e) => {
   const t = e.target.closest('button, a, [data-close]');
   if (!t) return;
   const d = t.dataset;
-  if (d.add) { cart = addItem(cart, d.add); changed(); warm(); }
+  if (d.add) { if (!off.has(d.add)) { cart = addItem(cart, d.add); changed(); } warm(); }
   else if (d.del) { cart = removeItem(cart, d.del); changed(); }
+  else if (d.drop) { cart = { ...cart }; delete cart[d.drop]; changed(); }
   else if (d.cabin) {
     cabin = Number(d.cabin);
     store.set('sm-cabin', cabin);

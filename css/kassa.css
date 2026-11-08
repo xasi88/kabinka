@@ -52,6 +52,22 @@ button:disabled { opacity: .5; }
 .acts { display: flex; gap: var(--s2); margin-top: var(--s4); }
 .acts .act { flex: 1; }
 
+/* Наличие: кнопка в шапке и список блюд. */
+.tool { flex: none; min-height: var(--tap); padding: 0 var(--s4); border: 2px solid var(--red); border-radius: var(--r); font-weight: 600; white-space: nowrap; }
+.tool.hot { background: var(--red); color: var(--on-red); }
+.stock { max-width: 960px; margin: 0 auto; padding: var(--s4); }
+.stock h1 { font-size: 32px; }
+.stock > p { margin: var(--s2) 0 var(--s4); line-height: 1.5; }
+.stock h2 { margin: var(--s6) 0 var(--s3); font-size: 22px; }
+.sk-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: var(--s2); }
+.sk { display: flex; align-items: center; justify-content: space-between; gap: var(--s3); min-height: 64px; padding: var(--s2) var(--s4); border: 2px solid var(--line); border-radius: var(--r); background: var(--surface); font-size: 17px; text-align: left; }
+.sk b { flex: none; min-width: 64px; padding: var(--s1) var(--s2); border-radius: var(--r); background: var(--bg); font-size: 18px; text-align: center; }
+.sk.no { border-color: var(--red); }
+.sk.no span { color: var(--muted); text-decoration: line-through; }
+.sk.no b { background: var(--red); color: var(--on-red); }
+.ord li.gone span:first-child { color: var(--red); }
+.ord li em { font-style: normal; font-size: 14px; font-weight: 600; }
+
 .banner { display: block; width: 100%; min-height: 56px; padding: var(--s3) var(--s4); background: var(--red); color: var(--on-red); font: 600 18px var(--font-body); text-align: center; }
 .banner[hidden] { display: none; }
 .banner.off { background: var(--surface); color: var(--text); border-bottom: 2px solid var(--red); }

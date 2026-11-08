@@ -1,5 +1,5 @@
 // Firebase для меню и кассы. Библиотеки грузятся только когда нужны.
-import { firebaseConfig } from './firebase-config.js?v=927b8f56';
+import { firebaseConfig } from './firebase-config.js?v=ab7f6d26';
 
 const V = 'https://www.gstatic.com/firebasejs/10.14.1/';
 let appPromise;

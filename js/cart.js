@@ -100,3 +100,13 @@ export function plural(n, one, few, many) {
 }
 
 export const dishes = (n) => `${n} ${plural(n, 'блюдо', 'блюда', 'блюд')}`;
+
+// Наличие: номера блюд, которых нет. Кассир ведёт их в menu/live, поле off.
+export const cleanOff = (off) => (Array.isArray(off) ? off.filter((id) => typeof id === 'string' && id.length <= 40) : []);
+export const offLines = (lines, off) => lines.filter((l) => off.has(l.id));
+
+// Ответ Firestore REST на menu/live: поле off, список строк. Документа нет: всё есть.
+export function offFromRest(json) {
+  const vals = json?.fields?.off?.arrayValue?.values;
+  return cleanOff(Array.isArray(vals) ? vals.map((v) => v.stringValue) : []);
+}
